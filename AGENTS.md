@@ -2,8 +2,9 @@
 
 > **Project:** EvoTerra — a browser-based 2D artificial-life sandbox.
 > The specifications call the concept **Neural Creatures**; the repository and product name are **EvoTerra**.
-> **Status:** pre-implementation — specifications only, no application code or `package.json` yet.
-> **Last updated:** 2026-11-12
+> **Status:** Phase 1 (app shell, PixiJS renderer, camera) complete; Phase 2 in progress as a small
+> deterministic worker-driven movement prototype. See `README.md` for what actually runs.
+> **Last updated:** 2026-11-12 (see §16.5)
 > **Maintainer:** the human project owner.
 > **Development model:** solo, vibecoded by coding agents; no external reviewer or PR-approval gate.
 
@@ -385,6 +386,10 @@ Build a complete runnable vertical slice before expanding the world or ecosystem
 | 6 | Sandbox and persistence | Pan/zoom, overlays, inspector, speed/step controls, statistics, versioned IndexedDB save/load, clear errors |
 | 7 | Profiling and stabilization | Separate render/sim profiling, population benchmarks, no unbounded growth, documented limits, advanced features optional |
 
+**Current phase:** Phase 1 is complete. Phase 2 is partially complete: one worker owns a deterministic
+movement prototype, and start/pause/reset/speed plus batched snapshots work; perception, energy,
+resources, reproduction, and terrain remain Phase 3+ work. Do not add them as Phase 2 work.
+
 Detailed acceptance criteria live in `neural-creatures-project-description.md` §13.
 
 ### 12.1 Definition of done
@@ -423,8 +428,9 @@ Once the project is scaffolded, the expected checks are:
 
 ```bash
 npm run dev        # local development
-npx vitest run     # non-watch test run
-npm run build      # production build check
+npm run test       # non-watch test run (vitest run)
+npm run typecheck  # tsc -b across app, worker, and tests
+npm run build      # type-check + production build
 npm run preview    # inspect the production build locally
 ```
 
@@ -503,6 +509,8 @@ Use this table when a deliberate departure from the specifications is approved, 
 | 2026-11-12 | Zustand timing | Start with React state; add Zustand only when shared UI state justifies it | Follows the more conservative project-description guidance |
 | 2026-11-12 | Statistics cadence | Default to 1–2 updates per second; allow up to 5 only after profiling | Project description says 1–2; tech stack says 2–5 |
 | 2026-11-12 | Dependency installation | Install only what the current phase needs; the full stack list is not a day-one install script | Both documents warn against installing everything early |
+| 2026-11-12 | Worker protocol ownership | `src/simulation/core/session.ts` (framework-free) owns command handling, status, tick, and snapshot decisions; `src/workers/simulation.worker.ts` is a thin adapter that owns only the clock and the message boundary | Plan §5.1 assigns command handling to the worker; keeping the decisions in the simulation core makes the whole protocol unit-testable without a browser, and the worker still owns the live instance and scheduling |
+| 2026-11-12 | Node.js version floor | Node `^22.12` / `^24` (Vitest 5 engine requirement), declared in `package.json` `engines` | The Vite 8 floor is lower, but the documented test command must work for anyone following the README |
 
 Add a row whenever a new conflict is resolved or a deviation is approved. Do not silently change established behavior.
 
@@ -567,6 +575,7 @@ Remove outdated content during review instead of letting it accumulate.
 |---|---|---|
 | 2026-11-12 | Initial `AGENTS.md` created from the project description and technology stack | Establish agent rules, architecture guardrails, and self-maintenance process |
 | 2026-11-12 | Recorded the solo vibecoded development model: no external reviewers or PR-approval gate | Maintainer direction; agents self-review and verify instead |
+| 2026-11-12 | Recorded Phase 1 complete / Phase 2 partial, and replaced the documented checks with the scripts that actually exist (`npm run test`, `npm run typecheck`, `npm run build`, `npm run preview`) | The repository is scaffolded, so the status line, phase table, and verification commands must match reality |
 
 ---
 
