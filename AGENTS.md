@@ -2,8 +2,9 @@
 
 > **Project:** EvoTerra — a browser-based 2D artificial-life sandbox.
 > The specifications call the concept **Neural Creatures**; the repository and product name are **EvoTerra**.
-> **Status:** Phase 1 (app shell, PixiJS renderer, camera) complete; Phase 2 in progress as a small
-> deterministic worker-driven movement prototype. See `README.md` for what actually runs.
+> **Status:** Phase 1 (app shell, PixiJS renderer, camera), Phase 2 (deterministic simulation worker),
+> and Phase 3 (creature, food, energy, death loop) are complete. Phase 4 (reproduction and evolution)
+> is partially complete as a bounded asexual-reproduction slice. See `README.md` for what actually runs.
 > **Last updated:** 2026-11-12 (see §16.5)
 > **Maintainer:** the human project owner.
 > **Development model:** solo, vibecoded by coding agents; no external reviewer or PR-approval gate.
@@ -16,7 +17,7 @@ This file tells AI coding agents how to work in this repository. It is **operati
 
 Before changing code:
 
-1. Read `neural-creatures-project-description.md` and `neural-creatures-tech-stack.md`.
+1. Read `docs/neural-creatures-project-description.md` and `docs/neural-creatures-tech-stack.md`.
 2. Inspect the current repository state. Do not assume files, dependencies, or scripts exist because a specification mentions them.
 3. Identify the current roadmap phase in section 12. Work only on the current phase or the next one.
 4. For any non-trivial change, produce a short plan before editing.
@@ -36,8 +37,8 @@ If two sources genuinely conflict, **stop and surface the conflict**. Do not sil
 
 The two specification files are the product source of truth:
 
-- `neural-creatures-project-description.md` — product vision, simulation rules, UX, roadmap, success criteria.
-- `neural-creatures-tech-stack.md` — technology selection, architecture, setup, deployment, engineering rules.
+- `docs/neural-creatures-project-description.md` — product vision, simulation rules, UX, roadmap, success criteria.
+- `docs/neural-creatures-tech-stack.md` — technology selection, architecture, setup, deployment, engineering rules.
 
 Do not duplicate large portions of those documents here. Keep this file focused on **how an agent should behave** while implementing them.
 
@@ -386,11 +387,13 @@ Build a complete runnable vertical slice before expanding the world or ecosystem
 | 6 | Sandbox and persistence | Pan/zoom, overlays, inspector, speed/step controls, statistics, versioned IndexedDB save/load, clear errors |
 | 7 | Profiling and stabilization | Separate render/sim profiling, population benchmarks, no unbounded growth, documented limits, advanced features optional |
 
-**Current phase:** Phase 1 is complete. Phase 2 is partially complete: one worker owns a deterministic
-movement prototype, and start/pause/reset/speed plus batched snapshots work; perception, energy,
-resources, reproduction, and terrain remain Phase 3+ work. Do not add them as Phase 2 work.
+**Current phase:** Phase 1, Phase 2, and Phase 3 are complete. Phase 4 is partially complete: asexual
+reproduction, deep-copy inheritance, bounded seeded mutation, lineage metadata, birth/death counters,
+and seeded replay are implemented and tested; broader evolution tooling, species analysis, and any
+Phase 5+ work (procedural biomes, noise, hydration, persistence) is not. Do not add Phase 5+ features
+without a maintainer request.
 
-Detailed acceptance criteria live in `neural-creatures-project-description.md` §13.
+Detailed acceptance criteria live in `docs/neural-creatures-project-description.md` §13.
 
 ### 12.1 Definition of done
 
@@ -576,6 +579,8 @@ Remove outdated content during review instead of letting it accumulate.
 | 2026-11-12 | Initial `AGENTS.md` created from the project description and technology stack | Establish agent rules, architecture guardrails, and self-maintenance process |
 | 2026-11-12 | Recorded the solo vibecoded development model: no external reviewers or PR-approval gate | Maintainer direction; agents self-review and verify instead |
 | 2026-11-12 | Recorded Phase 1 complete / Phase 2 partial, and replaced the documented checks with the scripts that actually exist (`npm run test`, `npm run typecheck`, `npm run build`, `npm run preview`) | The repository is scaffolded, so the status line, phase table, and verification commands must match reality |
+| 2026-11-12 | Recorded Phase 2 and Phase 3 complete and Phase 4 partially complete; added the simulation/domain module layout (`creatures`, `neural`, `resources`, `spatial`, `terrain`) and the worker `WORLD`/`STATS`/`CREATURE_DETAILS` events | The 24-hour Phase 2 plan's creature/food/energy/death loop and bounded asexual-reproduction slice are implemented, tested, and documented in `README.md` |
+| 2026-11-12 | Moved long-form documents (specifications, plans, reports, handoff) into `docs/`; updated this file's spec paths and the README links | Keep the repository root focused on code, `README.md`, and `AGENTS.md`, and keep documented paths matching reality |
 
 ---
 

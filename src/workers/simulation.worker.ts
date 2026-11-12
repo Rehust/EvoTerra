@@ -61,8 +61,7 @@ scope.setInterval(() => {
   lastTurnMs = now
 
   try {
-    const snapshot = session.advance(elapsedSeconds)
-    if (snapshot) post(snapshot)
+    for (const workerEvent of session.advance(elapsedSeconds)) post(workerEvent)
   } catch (error) {
     reportError(error)
   }

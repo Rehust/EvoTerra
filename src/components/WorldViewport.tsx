@@ -1,17 +1,23 @@
 import { useEffect, useRef, useState } from 'react'
 import { PixiWorld } from '../rendering/PixiWorld.ts'
-import type { SnapshotEvent } from '../shared/messages.ts'
+import type { SnapshotEvent, WorldEvent } from '../shared/messages.ts'
 
 interface WorldViewportProps {
   readonly getSnapshot: () => SnapshotEvent | null
+  readonly getWorld: () => WorldEvent | null
+  readonly selectedId: number | null
+  readonly onSelect: (creatureId: number | null) => void
 }
 
 /**
  * React host for the PixiJS canvas. React owns only the empty host element and
  * the loading/error overlays; the world itself is drawn by PixiWorld.
  */
-export function WorldViewport({ getSnapshot }: WorldViewportProps) {
+export function WorldViewport({ getSnapshot, getWorld, selectedId, onSelect }: WorldViewportProps) {
   const hostRef = useRef<HTMLDivElement>(null)
+  const selectedIdRef = useRef<number | null>(selectedId)
+  selectedIdRef.current = selectedId
+
   const [rendererError, setRendererError] = useState<string | null>(null)
   const [ready, setReady] = useState(false)
 
@@ -22,7 +28,13 @@ export function WorldViewport({ getSnapshot }: WorldViewportProps) {
     let world: PixiWorld | null = null
     let cancelled = false
 
-    PixiWorld.create({ host, getSnapshot })
+    PixiWorld.create({
+      host,
+      getSnapshot,
+      getWorld,
+      getSelectedId: () => selectedIdRef.current,
+      onSelect,
+    })
       .then((created) => {
         if (cancelled) {
           created.destroy()
@@ -45,7 +57,7 @@ export function WorldViewport({ getSnapshot }: WorldViewportProps) {
       world?.destroy()
       world = null
     }
-  }, [getSnapshot])
+  }, [getSnapshot, getWorld, onSelect])
 
   return (
     <div className="viewport">
@@ -68,7 +80,7 @@ export function WorldViewport({ getSnapshot }: WorldViewportProps) {
         </div>
       ) : null}
 
-      <p className="viewport__hint">Drag to pan · Scroll to zoom</p>
+      <p className="viewport__hint">Drag to pan · Scroll to zoom · Click a creature to inspect</p>
     </div>
   )
 }

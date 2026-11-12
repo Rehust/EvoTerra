@@ -1,51 +1,66 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { WorldViewport } from '../components/WorldViewport.tsx'
-import { FIXED_TIMESTEP_SECONDS, SPEED_MULTIPLIERS, type SpeedMultiplier } from '../simulation/core/config.ts'
+import { CreatureInspector } from '../components/inspector/CreatureInspector.tsx'
 import {
-  createSummaryRefreshState,
-  nextSummaryRefreshState,
-  shouldRefreshSummary,
-  type SummaryRefreshState,
-} from './summaryThrottle.ts'
+  FIXED_TIMESTEP_SECONDS,
+  SPEED_MULTIPLIERS,
+  type SpeedMultiplier,
+} from '../simulation/core/config.ts'
 import { useSimulationWorker } from './useSimulationWorker.ts'
 
-/**
- * Dashboard-style status refresh: ~2 updates per second, as the specifications
- * require. Snapshots arrive at ~15 Hz, so the panel throttles them.
- */
-const STATUS_REFRESH_MS = 500
-
-interface Summary {
-  tick: number
-  entityCount: number
-}
+const formatNumber = (value: number, digits = 0): string =>
+  value.toLocaleString('en-US', {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  })
 
 function App() {
-  const { status, error, send, getSnapshot, subscribe } = useSimulationWorker()
-  const [summary, setSummary] = useState<Summary | null>(null)
-  const summaryStateRef = useRef<SummaryRefreshState>(createSummaryRefreshState())
+  const {
+    status,
+    error,
+    stats,
+    inspection,
+    send,
+    getSnapshot,
+    getWorld,
+    requestInspect,
+    clearInspection,
+  } = useSimulationWorker()
 
-  // The tick/entity counters come from worker snapshots, throttled for the UI.
-  useEffect(
-    () =>
-      subscribe(() => {
-        const snapshot = getSnapshot()
-        if (!snapshot) return
-
-        const now = performance.now()
-        if (!shouldRefreshSummary(summaryStateRef.current, snapshot.tick, now, STATUS_REFRESH_MS)) {
-          return
-        }
-
-        summaryStateRef.current = nextSummaryRefreshState(snapshot.tick, now)
-        setSummary({ tick: snapshot.tick, entityCount: snapshot.entities.length })
-      }),
-    [subscribe, getSnapshot],
-  )
+  const [selectedId, setSelectedId] = useState<number | null>(null)
 
   const running = status?.running ?? false
   const initialized = status !== null
   const workerState = error !== null ? 'error' : initialized ? 'ready' : 'starting'
+
+  const handleSelect = useCallback(
+    (creatureId: number | null): void => {
+      setSelectedId(creatureId)
+      if (creatureId === null) clearInspection()
+      else requestInspect(creatureId)
+    },
+    [clearInspection, requestInspect],
+  )
+
+  // Refresh inspected values at the statistics cadence, and ignore any late
+  // response for a different selection because requestInspect replaced it.
+  const statsTick = stats?.tick ?? null
+  useEffect(() => {
+    if (selectedId === null) return
+    requestInspect(selectedId)
+  }, [selectedId, statsTick, requestInspect])
+
+  // A new run (INIT or RESET) invalidates any selected creature.
+  const runId = status?.runId ?? null
+  useEffect(() => {
+    setSelectedId(null)
+    clearInspection()
+  }, [runId, clearInspection])
+
+  const population = stats?.population ?? status?.population ?? 0
+  const births = stats?.births ?? status?.births ?? 0
+  const deaths = stats?.deaths ?? status?.deaths ?? 0
+  const tick = stats?.tick ?? status?.tick ?? 0
 
   return (
     <div className="app">
@@ -53,7 +68,7 @@ function App() {
         <div className="brand">
           <span className="brand__mark" aria-hidden="true" />
           <h1>EvoTerra</h1>
-          <span className="brand__tag">movement prototype</span>
+          <span className="brand__tag">creature simulation</span>
         </div>
         <p className={`worker-state worker-state--${workerState}`}>
           <span className="worker-state__dot" aria-hidden="true" />
@@ -74,7 +89,15 @@ function App() {
       ) : null}
 
       <main className="workspace">
-        <WorldViewport getSnapshot={getSnapshot} />
+        <WorldViewport
+          getSnapshot={getSnapshot}
+          getWorld={getWorld}
+          selectedId={selectedId}
+          onSelect={handleSelect}
+        />
+        <aside className="sidebar">
+          <CreatureInspector inspection={inspection} />
+        </aside>
       </main>
 
       <footer className="console">
@@ -126,11 +149,31 @@ function App() {
         <dl className="readout" aria-label="Simulation status">
           <div>
             <dt>Tick</dt>
-            <dd>{summary !== null ? summary.tick : '—'}</dd>
+            <dd>{tick}</dd>
           </div>
           <div>
-            <dt>Entities</dt>
-            <dd>{summary !== null ? summary.entityCount : '—'}</dd>
+            <dt>Time</dt>
+            <dd>{formatNumber((stats?.timeSeconds ?? 0), 1)} s</dd>
+          </div>
+          <div>
+            <dt>Population</dt>
+            <dd>{population}</dd>
+          </div>
+          <div>
+            <dt>Births</dt>
+            <dd>{births}</dd>
+          </div>
+          <div>
+            <dt>Deaths</dt>
+            <dd>{deaths}</dd>
+          </div>
+          <div>
+            <dt>Avg energy</dt>
+            <dd>{formatNumber(stats?.averageEnergy ?? 0, 1)}</dd>
+          </div>
+          <div>
+            <dt>Food</dt>
+            <dd>{formatNumber(stats?.totalFood ?? 0)}</dd>
           </div>
           <div>
             <dt>Seed</dt>
@@ -144,8 +187,9 @@ function App() {
       </footer>
 
       <p className="footnote">
-        Prototype test particles driven by a single simulation Web Worker. Neural decisions,
-        food, energy, reproduction, and evolution are not implemented yet.
+        Neural-network-driven creatures search for finite food, manage energy, die, and reproduce
+        asexually with bounded mutation. One deterministic worker; terrain is a bounded grassland
+        test habitat.
       </p>
     </div>
   )
