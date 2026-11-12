@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useState } from 'react'
 import { WorldViewport } from '../components/WorldViewport.tsx'
 import { CreatureInspector } from '../components/inspector/CreatureInspector.tsx'
+import { TerrainPanel } from '../components/terrain/TerrainPanel.tsx'
+import {
+  DEFAULT_OVERLAYS,
+  describeTerrainCell,
+  type CellDescription,
+  type OverlayOptions,
+} from '../rendering/terrainOverlay.ts'
 import {
   FIXED_TIMESTEP_SECONDS,
   SPEED_MULTIPLIERS,
@@ -20,6 +27,7 @@ function App() {
     error,
     stats,
     inspection,
+    world,
     send,
     getSnapshot,
     getWorld,
@@ -28,6 +36,8 @@ function App() {
   } = useSimulationWorker()
 
   const [selectedId, setSelectedId] = useState<number | null>(null)
+  const [overlays, setOverlays] = useState<OverlayOptions>(DEFAULT_OVERLAYS)
+  const [picked, setPicked] = useState<CellDescription | null>(null)
 
   const running = status?.running ?? false
   const initialized = status !== null
@@ -42,6 +52,33 @@ function App() {
     [clearInspection, requestInspect],
   )
 
+  // A click resolves to a creature, or to a terrain cell when it misses every
+  // creature. Both cases come from one pointer pick in the renderer. The world
+  // is read through the getter so this callback stays stable for the renderer.
+  const handlePick = useCallback(
+    (creatureId: number | null, point: { x: number; y: number } | null): void => {
+      handleSelect(creatureId)
+      if (creatureId !== null || point === null) {
+        setPicked(null)
+        return
+      }
+      const world = getWorld()
+      const snapshot = getSnapshot()
+      setPicked(
+        world === null || snapshot === null
+          ? null
+          : describeTerrainCell(world.bounds, world.terrain, snapshot.food, point.x, point.y),
+      )
+    },
+    [getSnapshot, getWorld, handleSelect],
+  )
+
+  const handleToggleOverlay = useCallback((key: keyof OverlayOptions): void => {
+    setOverlays((current) => ({ ...current, [key]: !current[key] }))
+  }, [])
+
+  const visionRange = inspection.status === 'found' ? inspection.details.traits.visionRange : null
+
   // Refresh inspected values at the statistics cadence, and ignore any late
   // response for a different selection because requestInspect replaced it.
   const statsTick = stats?.tick ?? null
@@ -50,10 +87,11 @@ function App() {
     requestInspect(selectedId)
   }, [selectedId, statsTick, requestInspect])
 
-  // A new run (INIT or RESET) invalidates any selected creature.
+  // A new run (INIT or RESET) invalidates any selected creature and picked cell.
   const runId = status?.runId ?? null
   useEffect(() => {
     setSelectedId(null)
+    setPicked(null)
     clearInspection()
   }, [runId, clearInspection])
 
@@ -93,9 +131,18 @@ function App() {
           getSnapshot={getSnapshot}
           getWorld={getWorld}
           selectedId={selectedId}
-          onSelect={handleSelect}
+          overlays={overlays}
+          visionRange={visionRange}
+          onPick={handlePick}
         />
         <aside className="sidebar">
+          <TerrainPanel
+            world={world}
+            totalFood={stats?.totalFood ?? 0}
+            picked={picked}
+            overlays={overlays}
+            onToggle={handleToggleOverlay}
+          />
           <CreatureInspector inspection={inspection} />
         </aside>
       </main>

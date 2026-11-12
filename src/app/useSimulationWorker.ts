@@ -32,6 +32,8 @@ export interface SimulationClient {
   readonly error: string | null
   readonly stats: SimulationStats | null
   readonly inspection: InspectionState
+  /** Static world (bounds + terrain) for the current run. */
+  readonly world: WorldEvent | null
   readonly send: (command: ClientCommand) => void
   /** Newest accepted snapshot; read by the renderer once per frame. */
   readonly getSnapshot: () => SnapshotEvent | null
@@ -47,6 +49,7 @@ export function useSimulationWorker(): SimulationClient {
   const [error, setError] = useState<string | null>(null)
   const [stats, setStats] = useState<SimulationStats | null>(null)
   const [inspection, setInspection] = useState<InspectionState>({ status: 'idle' })
+  const [world, setWorld] = useState<WorldEvent | null>(null)
 
   const workerRef = useRef<Worker | null>(null)
   const snapshotRef = useRef<SnapshotEvent | null>(null)
@@ -88,6 +91,7 @@ export function useSimulationWorker(): SimulationClient {
         case 'WORLD':
           if (worldRef.current === null || message.runId >= worldRef.current.runId) {
             worldRef.current = message
+            setWorld(message)
           }
           return
         case 'SNAPSHOT':
@@ -140,6 +144,7 @@ export function useSimulationWorker(): SimulationClient {
       workerRef.current = null
       snapshotRef.current = null
       worldRef.current = null
+      setWorld(null)
       pendingInspectRef.current = null
     }
   }, [acceptSnapshot])
@@ -175,6 +180,7 @@ export function useSimulationWorker(): SimulationClient {
     error,
     stats,
     inspection,
+    world,
     send,
     getSnapshot,
     getWorld,

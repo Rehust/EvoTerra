@@ -1,22 +1,37 @@
 import { useEffect, useRef, useState } from 'react'
 import { PixiWorld } from '../rendering/PixiWorld.ts'
+import type { OverlayOptions } from '../rendering/terrainOverlay.ts'
 import type { SnapshotEvent, WorldEvent } from '../shared/messages.ts'
 
 interface WorldViewportProps {
   readonly getSnapshot: () => SnapshotEvent | null
   readonly getWorld: () => WorldEvent | null
   readonly selectedId: number | null
-  readonly onSelect: (creatureId: number | null) => void
+  readonly overlays: OverlayOptions
+  /** Vision radius of the selected creature, when its details are known. */
+  readonly visionRange: number | null
+  readonly onPick: (creatureId: number | null, point: { x: number; y: number } | null) => void
 }
 
 /**
  * React host for the PixiJS canvas. React owns only the empty host element and
  * the loading/error overlays; the world itself is drawn by PixiWorld.
  */
-export function WorldViewport({ getSnapshot, getWorld, selectedId, onSelect }: WorldViewportProps) {
+export function WorldViewport({
+  getSnapshot,
+  getWorld,
+  selectedId,
+  overlays,
+  visionRange,
+  onPick,
+}: WorldViewportProps) {
   const hostRef = useRef<HTMLDivElement>(null)
   const selectedIdRef = useRef<number | null>(selectedId)
   selectedIdRef.current = selectedId
+  const overlaysRef = useRef<OverlayOptions>(overlays)
+  overlaysRef.current = overlays
+  const visionRangeRef = useRef<number | null>(visionRange)
+  visionRangeRef.current = visionRange
 
   const [rendererError, setRendererError] = useState<string | null>(null)
   const [ready, setReady] = useState(false)
@@ -33,7 +48,9 @@ export function WorldViewport({ getSnapshot, getWorld, selectedId, onSelect }: W
       getSnapshot,
       getWorld,
       getSelectedId: () => selectedIdRef.current,
-      onSelect,
+      getOverlays: () => overlaysRef.current,
+      getVisionRange: () => visionRangeRef.current,
+      onPick,
     })
       .then((created) => {
         if (cancelled) {
@@ -57,7 +74,7 @@ export function WorldViewport({ getSnapshot, getWorld, selectedId, onSelect }: W
       world?.destroy()
       world = null
     }
-  }, [getSnapshot, getWorld, onSelect])
+  }, [getSnapshot, getWorld, onPick])
 
   return (
     <div className="viewport">
@@ -80,7 +97,9 @@ export function WorldViewport({ getSnapshot, getWorld, selectedId, onSelect }: W
         </div>
       ) : null}
 
-      <p className="viewport__hint">Drag to pan · Scroll to zoom · Click a creature to inspect</p>
+      <p className="viewport__hint">
+        Drag to pan · Scroll to zoom · Click a creature to inspect it, or the ground for cell info
+      </p>
     </div>
   )
 }

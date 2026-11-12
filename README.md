@@ -25,6 +25,10 @@ What actually runs today:
   average energy, food, and seed readouts.
 - Click a creature to inspect its real traits, latest neural inputs, latest outputs, and a summary of
   its actual network parameters. The inspector refreshes at the statistics cadence.
+- A terrain panel with a grass/rock/food legend and cell counts, cell details for any clicked point of
+  ground, and three overlays: grid lines, food-density heat, and the selected creature's sensing
+  radii (vision, neighbour, boundary margin). All of it is derived from `WORLD`, `SNAPSHOT`, and
+  `STATS`; the worker has no terrain-UI code.
 - Batched snapshots at roughly 15 Hz and statistics at roughly 1.3 Hz; stale snapshots from an older
   run are discarded.
 
@@ -66,8 +70,11 @@ otherwise.
 3. **Pause** stops tick advancement; **Reset** restores the exact seeded starting state.
 4. Speed buttons run 1×/2×/5×/10× more fixed steps per wall-clock second (the step itself never changes).
 5. Drag inside the viewport to pan, scroll to zoom (zoom is anchored on the pointer).
-6. Click a creature to inspect it; click empty terrain to clear the selection.
-7. The readout shows tick, time, population, births, deaths, average energy, food, seed, and step length.
+6. Click a creature to inspect it; click empty terrain to clear the selection and see that cell's
+   coordinates, surface, and nearby food in the terrain panel.
+7. Use the terrain panel toggles for grid lines, food-density heat, and the selected creature's
+   sensing radii. Only the grid is on by default.
+8. The readout shows tick, time, population, births, deaths, average energy, food, seed, and step length.
 
 The population is expected to fluctuate. An initial die-off of poorly connected networks followed by a
 smaller stable population is a normal outcome, not a bug; food is finite and regenerates slowly.
@@ -108,8 +115,8 @@ EvoTerra/
 ├── public/                     Static assets (favicon)
 ├── src/
 │   ├── app/                    App shell, styles, worker hook
-│   ├── components/             WorldViewport, CreatureInspector
-│   ├── rendering/              PixiWorld, camera math
+│   ├── components/             WorldViewport, CreatureInspector, terrain/TerrainPanel
+│   ├── rendering/              PixiWorld, camera math, terrain overlay derivation
 │   ├── simulation/
 │   │   ├── core/               Config, RNG, world creation, indexes, update order, scheduler, session, stats
 │   │   ├── creatures/          Perception, movement, energy, reproduction, controller, creature factory
@@ -121,7 +128,7 @@ EvoTerra/
 │   ├── workers/                simulation.worker.ts
 │   └── main.tsx
 ├── tests/
-│   ├── rendering/              Camera math
+│   ├── rendering/              Camera math, terrain overlay derivation
 │   ├── shared/                 Snapshot ordering
 │   └── simulation/             RNG, grid, terrain, food, network, genome, perception, movement,
 │                               energy, death, reproduction, world creation, session protocol,
@@ -139,6 +146,7 @@ EvoTerra/
 - [Technology stack](docs/neural-creatures-tech-stack.md)
 - [Phase 2 plan](docs/evoterra-24-hour-creature-simulation-plan-phase2.md)
 - [Phase 2 handoff report](docs/evoterra-phase2-handoff-report.md)
+- [Plan 3: terrain layer UI](docs/evoterra-plan3-terrain-ui.md)
 - [Agent rules](AGENTS.md)
 - [Overnight shift plan](docs/evoterra-overnight-shift-plan.md)
 - [Overnight shift report](docs/evoterra-overnight-shift-report.md)

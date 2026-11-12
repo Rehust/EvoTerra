@@ -394,6 +394,61 @@ dt {
   text-align: right;
 }
 
+/* Terrain panel --------------------------------------------------------- */
+
+.terrain {
+  border-bottom: 1px solid var(--border);
+}
+
+.terrain__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.terrain__chip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.terrain__swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+
+.terrain__swatch--grass {
+  background: #0d1a14;
+  border: 1px solid #2f4657;
+}
+
+.terrain__swatch--rock {
+  background: #2b333b;
+  border: 1px solid #3d4a55;
+}
+
+.terrain__toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.button--toggle {
+  font-size: 12px;
+  padding: 5px 9px;
+}
+
+.button--toggle[aria-pressed='true'] {
+  color: var(--text);
+  border-color: var(--accent);
+  background: rgb(79 179 169 / 16%);
+}
+
 @media (max-width: 900px) {
   .workspace {
     flex-direction: column;

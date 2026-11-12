@@ -15,6 +15,16 @@ import {
   MIN_ZOOM,
   type Camera,
 } from './camera.ts'
+import {
+  HEAT_CELL_SIZE,
+  foodHeatGrid,
+  heatIntensity,
+  type OverlayOptions,
+} from './terrainOverlay.ts'
+import {
+  BOUNDARY_PRESSURE_MARGIN,
+  NEIGHBOR_PERCEPTION_RADIUS,
+} from '../simulation/core/config.ts'
 
 /**
  * PixiJS world viewport.
@@ -31,8 +41,15 @@ export interface PixiWorldOptions {
   readonly getSnapshot: () => SnapshotEvent | null
   readonly getWorld: () => WorldEvent | null
   readonly getSelectedId: () => number | null
-  /** Called with a creature id, or null when empty terrain is clicked. */
-  readonly onSelect: (creatureId: number | null) => void
+  /** Overlay switches owned by React; read once per frame. */
+  readonly getOverlays: () => OverlayOptions
+  /** Vision radius of the selected creature, when its details are known. */
+  readonly getVisionRange: () => number | null
+  /**
+   * Left click on the world: the creature under the pointer (or null) and the
+   * world point that was clicked.
+   */
+  readonly onPick: (creatureId: number | null, point: { x: number; y: number } | null) => void
 }
 
 /** World-unit spacing of the background guide lines. */
@@ -44,6 +61,13 @@ const WHEEL_ZOOM_SENSITIVITY = 0.0015
 const FOOD_RADIUS = 3.5
 const PICK_RADIUS_PADDING = 4
 const CLICK_DRAG_TOLERANCE_PX = 4
+/** Heat overlay rebuild cadence; matches the statistics update interval. */
+const HEAT_REFRESH_MS = 750
+const HEAT_COLOR = 0x7fd18b
+const HEAT_MAX_ALPHA = 0.45
+const VISION_RING_COLOR = 0x6fb3e0
+const NEIGHBOR_RING_COLOR = 0xd8c46a
+const BOUNDARY_MARGIN_COLOR = 0xd98f6a
 
 const creatureColor = (hue: number): number => {
   const index = Math.floor(hue / HUE_SEGMENTS) % CREATURE_PALETTE.length
@@ -54,22 +78,28 @@ export class PixiWorld {
   private readonly getSnapshot: () => SnapshotEvent | null
   private readonly getWorld: () => WorldEvent | null
   private readonly getSelectedId: () => number | null
-  private readonly onSelect: (creatureId: number | null) => void
+  private readonly getOverlays: () => OverlayOptions
+  private readonly getVisionRange: () => number | null
+  private readonly onPick: PixiWorldOptions['onPick']
   private readonly host: HTMLElement
   private readonly app: Application
   private readonly worldLayer = new Container()
   private readonly terrainLayer = new Graphics()
+  private readonly rockLayer = new Graphics()
   private readonly grid = new Graphics()
   private readonly worldBorder = new Graphics()
+  private readonly heatLayer = new Graphics()
   private readonly foodLayer = new Container()
   private readonly creatureLayer = new Container()
   private readonly selectionLayer = new Graphics()
+  private readonly debugLayer = new Graphics()
   private readonly foodSprites = new Map<number, Graphics>()
   private readonly creatureSprites = new Map<number, Graphics>()
   private readonly resizeObserver: ResizeObserver
   private camera: Camera | null = null
   private bounds: WorldBounds | null = null
   private worldRunId: number | null = null
+  private heatRenderedAt = 0
   private dragPointerId: number | null = null
   private dragMoved = false
   private dragStart = { x: 0, y: 0 }
@@ -81,7 +111,9 @@ export class PixiWorld {
     this.getSnapshot = options.getSnapshot
     this.getWorld = options.getWorld
     this.getSelectedId = options.getSelectedId
-    this.onSelect = options.onSelect
+    this.getOverlays = options.getOverlays
+    this.getVisionRange = options.getVisionRange
+    this.onPick = options.onPick
     this.app = app
     this.resizeObserver = new ResizeObserver(() => this.resize())
   }
@@ -120,11 +152,14 @@ export class PixiWorld {
   private mount(): void {
     this.worldLayer.addChild(
       this.terrainLayer,
+      this.rockLayer,
       this.grid,
       this.worldBorder,
+      this.heatLayer,
       this.foodLayer,
       this.creatureLayer,
       this.selectionLayer,
+      this.debugLayer,
     )
     this.app.stage.addChild(this.worldLayer)
     this.host.appendChild(this.app.canvas)
@@ -188,10 +223,11 @@ export class PixiWorld {
     const { cellSize, cols, rows, passable } = world.terrain
     this.terrainLayer.clear()
     this.terrainLayer.rect(0, 0, bounds.width, bounds.height).fill({ color: 0x0d1a14 })
+    this.rockLayer.clear()
     for (let row = 0; row < rows; row += 1) {
       for (let col = 0; col < cols; col += 1) {
         if (passable[row * cols + col] === 1) continue
-        this.terrainLayer
+        this.rockLayer
           .rect(col * cellSize, row * cellSize, cellSize, cellSize)
           .fill({ color: 0x2b333b })
       }
@@ -216,6 +252,9 @@ export class PixiWorld {
     this.foodLayer.removeChildren()
     this.creatureSprites.clear()
     this.creatureLayer.removeChildren()
+    this.heatLayer.clear()
+    this.debugLayer.clear()
+    this.heatRenderedAt = 0
 
     if (this.camera === null) {
       const fit = Math.min(this.viewport.width / bounds.width, this.viewport.height / bounds.height)
@@ -248,9 +287,65 @@ export class PixiWorld {
     if (!snapshot || this.bounds === null) return
     if (snapshot.runId !== this.worldRunId) return
 
+    const overlays = this.getOverlays()
+    this.grid.visible = overlays.grid
+    this.worldBorder.visible = overlays.grid
+    this.heatLayer.visible = overlays.foodHeat
+    this.debugLayer.visible = overlays.senseRadii
+
     this.syncFood(snapshot.food)
     this.syncCreatures(snapshot.creatures)
     this.drawSelection(snapshot.creatures)
+    if (overlays.foodHeat) this.syncHeat(snapshot)
+    if (overlays.senseRadii) this.drawSenseRadii(snapshot.creatures)
+  }
+
+  /** Rebuilds the food-density overlay at the statistics cadence, not per frame. */
+  private syncHeat(snapshot: SnapshotEvent): void {
+    if (this.bounds === null) return
+    const now = performance.now()
+    if (this.heatRenderedAt !== 0 && now - this.heatRenderedAt < HEAT_REFRESH_MS) return
+    this.heatLayer.clear()
+
+    const grid = foodHeatGrid(this.bounds, snapshot.food)
+    for (let row = 0; row < grid.rows; row += 1) {
+      for (let col = 0; col < grid.cols; col += 1) {
+        const intensity = heatIntensity(grid.units[row * grid.cols + col] ?? 0)
+        if (intensity <= 0) continue
+        this.heatLayer
+          .rect(col * HEAT_CELL_SIZE, row * HEAT_CELL_SIZE, HEAT_CELL_SIZE, HEAT_CELL_SIZE)
+          .fill({ color: HEAT_COLOR, alpha: intensity * HEAT_MAX_ALPHA })
+      }
+    }
+    this.heatRenderedAt = now
+  }
+
+  /** Selected-creature sensing radii against the terrain; off by default. */
+  private drawSenseRadii(creatures: readonly CreatureSnapshot[]): void {
+    this.debugLayer.clear()
+    if (this.bounds === null) return
+    const selectedId = this.getSelectedId()
+    if (selectedId === null) return
+    const selected = creatures.find((creature) => creature.id === selectedId)
+    if (selected === undefined) return
+
+    const visionRange = this.getVisionRange()
+    if (visionRange !== null) {
+      this.debugLayer
+        .circle(selected.x, selected.y, visionRange)
+        .stroke({ width: 1, color: VISION_RING_COLOR, alpha: 0.5 })
+    }
+    this.debugLayer
+      .circle(selected.x, selected.y, NEIGHBOR_PERCEPTION_RADIUS)
+      .stroke({ width: 1, color: NEIGHBOR_RING_COLOR, alpha: 0.4 })
+    this.debugLayer
+      .rect(
+        BOUNDARY_PRESSURE_MARGIN,
+        BOUNDARY_PRESSURE_MARGIN,
+        Math.max(this.bounds.width - BOUNDARY_PRESSURE_MARGIN * 2, 0),
+        Math.max(this.bounds.height - BOUNDARY_PRESSURE_MARGIN * 2, 0),
+      )
+      .stroke({ width: 1, color: BOUNDARY_MARGIN_COLOR, alpha: 0.35 })
   }
 
   private syncFood(food: readonly FoodSnapshot[]): void {
@@ -363,7 +458,13 @@ export class PixiWorld {
     }
     this.app.canvas.style.cursor = 'grab'
 
-    if (!this.dragMoved) this.onSelect(this.pickCreature(point))
+    if (!this.dragMoved) {
+      const creatureId = this.pickCreature(point)
+      const worldPoint = this.camera
+        ? screenToWorld(this.camera, this.viewport, point)
+        : null
+      this.onPick(creatureId, worldPoint)
+    }
   }
 
   private onWheel = (event: WheelEvent): void => {
